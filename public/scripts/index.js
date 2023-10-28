@@ -1,6 +1,7 @@
 let isAlreadyCalling = false;
 let getCalled = false;
-
+let isVideoOpen = true;
+let isAudio = true;
 const existingCalls = [];
 
 const { RTCPeerConnection, RTCSessionDescription } = window;
@@ -12,7 +13,7 @@ function unselectUsersFromList() {
     ".active-user.active-user--selected"
   );
 
-  alreadySelectedUser.forEach(el => {
+  alreadySelectedUser.forEach((el) => {
     el.setAttribute("class", "active-user");
   });
 }
@@ -46,14 +47,14 @@ async function callUser(socketId) {
 
   socket.emit("call-user", {
     offer,
-    to: socketId
+    to: socketId,
   });
 }
 
 function updateUserList(socketIds) {
   const activeUserContainer = document.getElementById("active-user-container");
-  console.log(activeUserContainer,'ac')
-  socketIds.forEach(socketId => {
+  console.log(activeUserContainer, "ac");
+  socketIds.forEach((socketId) => {
     const alreadyExistingUser = document.getElementById(socketId);
     if (!alreadyExistingUser) {
       const userContainerEl = createUserItemContainer(socketId);
@@ -77,17 +78,15 @@ socket.on("remove-user", ({ socketId }) => {
   }
 });
 
-socket.on("call-made", async data => {
+socket.on("call-made", async (data) => {
   if (getCalled) {
     const confirmed = confirm(
       `User "Socket: ${data.socket}" wants to call you. Do accept this call?`
     );
-
     if (!confirmed) {
       socket.emit("reject-call", {
-        from: data.socket
+        from: data.socket,
       });
-
       return;
     }
   }
@@ -100,12 +99,12 @@ socket.on("call-made", async data => {
 
   socket.emit("make-answer", {
     answer,
-    to: data.socket
+    to: data.socket,
   });
   getCalled = true;
 });
 
-socket.on("answer-made", async data => {
+socket.on("answer-made", async (data) => {
   await peerConnection.setRemoteDescription(
     new RTCSessionDescription(data.answer)
   );
@@ -116,29 +115,78 @@ socket.on("answer-made", async data => {
   }
 });
 
-socket.on("call-rejected", data => {
+socket.on("call-rejected", (data) => {
   alert(`User: "Socket: ${data.socket}" rejected your call.`);
   unselectUsersFromList();
 });
 
-peerConnection.ontrack = function({ streams: [stream] }) {
+peerConnection.ontrack = function ({ streams: [stream] }) {
   const remoteVideo = document.getElementById("remote-video");
   if (remoteVideo) {
     remoteVideo.srcObject = stream;
   }
 };
 
+function toggleTheCameraButtonText() {
+  const cameraOffButton = document.getElementById("camera-off");
+  if (!isVideoOpen) {
+    cameraOffButton.innerHTML = "Turn on Camera";
+  } else {
+    cameraOffButton.innerHTML = "Turn off Camera";
+  }
+}
+
+function toggleTheAudioButtonText() {
+  const audioOffButton = document.getElementById("audio-off");
+  if (!isAudio) {
+    audioOffButton.innerHTML = "Turn on Audio";
+  } else {
+    audioOffButton.innerHTML = "Turn off Audio";
+  }
+}
+
 navigator.getUserMedia(
   { video: true, audio: true },
-  stream => {
+  (stream) => {
+    // Assuming you have stored the stream in a variable to be accessed later
+    let currentStream = stream;
     const localVideo = document.getElementById("local-video");
     if (localVideo) {
       localVideo.srcObject = stream;
     }
+    stream
+      .getTracks()
+      .forEach((track) => peerConnection.addTrack(track, stream));
+    // Function to turn off the camera
+    function turnOffCamera() {
+      const videoTracks = currentStream.getVideoTracks();
+      videoTracks.forEach((track) => {
+        isVideoOpen = !isVideoOpen;
+        track.enabled = isVideoOpen; // Disable the video track
+        toggleTheCameraButtonText();
+      });
+    }
 
-    stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+    function turnOffAudio() {
+      const audioTracks = currentStream.getAudioTracks();
+      audioTracks.forEach((track) => {
+        isAudio = !isAudio;
+        track.enabled = isAudio; //Disable the audio track
+        toggleTheAudioButtonText();
+      });
+    }
+    // Example of turning off the camera when a button is clicked
+    const cameraOffButton = document.getElementById("camera-off");
+    if (cameraOffButton) {
+      cameraOffButton.addEventListener("click", turnOffCamera);
+    }
+
+    const audioOffButton = document.getElementById("audio-off");
+    if (audioOffButton) {
+      audioOffButton.addEventListener("click", turnOffAudio);
+    }
   },
-  error => {
+  (error) => {
     console.warn(error.message);
   }
 );
